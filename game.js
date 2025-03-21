@@ -5,7 +5,7 @@ const renderer = new THREE.WebGLRenderer();
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Añadir luz ambiental (para que el modelo no se vea negro)
+// Añadir luz ambiental
 const ambientLight = new THREE.AmbientLight(0xffffff, 1);
 scene.add(ambientLight);
 
@@ -53,72 +53,90 @@ const roof = new THREE.Mesh(roofGeometry, roofMaterial);
 roof.position.set(0, 5, 0);
 scene.add(roof);
 
-// Variable para el personaje (modelo 3D) y animaciones
-let character;
-let mixer; // Para manejar las animaciones
-let idleAction, walkAction; // Acciones de animación
-let activeAction; // Acción actualmente activa
+// Variable para el personaje y animaciones
+let character, mixer, walkAction, activeAction;
+let isWalking = false;
 const loader = new THREE.GLTFLoader();
-
 loader.load(
-    'resources/persona.glb', // Ruta al modelo con animaciones
+    'resources/persona.glb',
     (gltf) => {
         character = gltf.scene;
-        character.position.y = 0; // Posición inicial en el suelo
-        character.scale.set(1, 1, 1); // Escala inicial (ajusta si es necesario)
+        character.position.y = 0;
+        character.scale.set(1.5, 1.5, 1.5);
+        scene.add(character);
 
-        // Configurar animaciones
         mixer = new THREE.AnimationMixer(character);
         const animations = gltf.animations;
+        console.log('Animaciones:', animations);
 
         if (animations && animations.length > 0) {
-            console.log('Animaciones disponibles:', animations);
-            // Buscar animaciones "Idle" y "Walk"
-            idleAction = mixer.clipAction(animations.find(anim => anim.name.toLowerCase().includes('idle')) || animations[0]);
-            walkAction = mixer.clipAction(animations.find(anim => anim.name.toLowerCase().includes('walk')) || animations[1]);
-
-            // Configurar acciones
-            idleAction.play(); // Reproducir "Idle" por defecto
-            activeAction = idleAction;
-
-            // Asegurarse de que las animaciones no se sobrepongan
-            idleAction.setLoop(THREE.LoopRepeat);
-            walkAction.setLoop(THREE.LoopRepeat);
+            animations.forEach((anim, index) => console.log(`Animación ${index}: ${anim.name}`));
+            const walkAnim = animations.find(anim => anim.name.toLowerCase().includes('walk')) || animations[0];
+            if (walkAnim) {
+                walkAction = mixer.clipAction(walkAnim);
+                walkAction.setLoop(THREE.LoopRepeat);
+                walkAction.timeScale = 1;
+                walkAction.time = 0;
+                walkAction.paused = true;
+                walkAction.play();
+                mixer.update(0);
+                console.log('Animación de caminar configurada:', walkAnim.name);
+            } else {
+                console.warn('No se encontró animación de caminar');
+            }
         } else {
             console.warn('El modelo no tiene animaciones');
         }
-
-        scene.add(character);
-        console.log('Personaje cargado correctamente');
     },
-    (progress) => {
-        console.log(`Cargando: ${(progress.loaded / progress.total) * 100}%`);
-    },
-    (error) => {
-        console.error('Error al cargar el modelo:', error);
-    }
+    undefined,
+    (error) => console.error(error)
 );
 
-// Añadir una silla (cubo azul)
-const chairGeometry = new THREE.BoxGeometry(1, 1, 1);
-const chairMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
-const chair = new THREE.Mesh(chairGeometry, chairMaterial);
-chair.position.set(5, 0.5, 5);
-scene.add(chair);
+// Añadir un sofá
+let sofa;
+loader.load(
+    'resources/sofa.glb',
+    (gltf) => {
+        sofa = gltf.scene;
+        sofa.position.set(5, 0, 5);
+        sofa.scale.set(1, 1, 1);
+        scene.add(sofa);
+        console.log('Sofá cargado correctamente');
+    },
+    undefined,
+    (error) => console.error('Error al cargar el sofá:', error)
+);
 
-// Añadir una mesa (cubo marrón)
-const tableGeometry = new THREE.BoxGeometry(2, 1, 1);
-const tableMaterial = new THREE.MeshBasicMaterial({ color: 0x8b4513 });
-const table = new THREE.Mesh(tableGeometry, tableMaterial);
-table.position.set(-5, 0.5, -5);
-scene.add(table);
+// Añadir una mesa
+let table;
+loader.load(
+    'resources/muebles.glb',
+    (gltf) => {
+        table = gltf.scene;
+        table.position.set(-5, 0, -5);
+        table.scale.set(3, 3, 3);
+        scene.add(table);
+        console.log('Mesa cargada correctamente');
+    },
+    undefined,
+    (error) => console.error('Error al cargar la mesa:', error)
+);
 
-// Añadir un televisor (cubo gris)
-const tvGeometry = new THREE.BoxGeometry(2, 1, 0.5);
-const tvMaterial = new THREE.MeshBasicMaterial({ color: 0x333333 });
-const tv = new THREE.Mesh(tvGeometry, tvMaterial);
-tv.position.set(0, 0.5, 8);
-scene.add(tv);
+// Variable para la televisión y carga del modelo 3D
+let tv;
+loader.load(
+    'resources/tele.glb',
+    (gltf) => {
+        tv = gltf.scene;
+        tv.position.set(0, 0, 9);
+        tv.scale.set(1, 1, 1);
+        tv.rotation.y = Math.PI;
+        scene.add(tv);
+        console.log('Televisión cargada correctamente');
+    },
+    undefined,
+    (error) => console.error('Error al cargar la televisión:', error)
+);
 
 // Posicionar la cámara (inicial)
 camera.position.set(0, 5, 10);
@@ -126,6 +144,15 @@ camera.lookAt(0, 0, 0);
 
 // Reloj para las animaciones
 const clock = new THREE.Clock();
+
+// Objeto para rastrear el estado real de las teclas
+const keyStates = {
+    'w': false,
+    's': false,
+    'a': false,
+    'd': false,
+    'e': false
+};
 
 // Controles básicos
 const controls = {
@@ -137,15 +164,38 @@ const controls = {
 };
 
 let followCharacter = true;
-let isDragging = false;
-let previousMouseX = 0;
-let previousMouseY = 0;
 let theta = Math.PI / 2;
 let phi = Math.PI / 4;
 let radius = 10;
 
+// Bloquear el puntero al hacer clic en el canvas
+renderer.domElement.addEventListener('click', () => {
+    renderer.domElement.requestPointerLock();
+});
+
+// Detectar movimiento del mouse con Pointer Lock
+document.addEventListener('mousemove', (event) => {
+    if (document.pointerLockElement === renderer.domElement) {
+        const movementX = event.movementX || 0;
+        const movementY = event.movementY || 0;
+        theta -= movementX * 0.002;
+        phi = Math.min(Math.PI / 2, Math.max(0.1, phi - movementY * 0.002));
+    }
+});
+
+// Eventos de teclado con bloqueo estricto de Shift
 document.addEventListener('keydown', (event) => {
-    switch (event.key) {
+    const key = event.key;
+
+    // Bloquear Shift explícitamente
+    if (key === 'Shift' || key === 'ShiftLeft' || key === 'ShiftRight') {
+        event.preventDefault();
+        return;
+    }
+
+    keyStates[key] = true;
+
+    switch (key) {
         case 'w': controls.moveForward = true; break;
         case 's': controls.moveBackward = true; break;
         case 'a': controls.moveLeft = true; break;
@@ -159,11 +209,24 @@ document.addEventListener('keydown', (event) => {
                 phi = Math.PI / 4;
             }
             break;
+        case 'Escape':
+            document.exitPointerLock();
+            break;
     }
 });
 
 document.addEventListener('keyup', (event) => {
-    switch (event.key) {
+    const key = event.key;
+
+    // Bloquear Shift explícitamente
+    if (key === 'Shift' || key === 'ShiftLeft' || key === 'ShiftRight') {
+        event.preventDefault();
+        return;
+    }
+
+    keyStates[key] = false;
+
+    switch (key) {
         case 'w': controls.moveForward = false; break;
         case 's': controls.moveBackward = false; break;
         case 'a': controls.moveLeft = false; break;
@@ -172,30 +235,20 @@ document.addEventListener('keyup', (event) => {
     }
 });
 
-// Controles del mouse
-document.addEventListener('mousedown', (event) => {
-    if (event.button === 0) {
-        isDragging = true;
-        previousMouseX = event.clientX;
-        previousMouseY = event.clientY;
+// Detectar clic izquierdo para interactuar
+renderer.domElement.addEventListener('mousedown', (event) => {
+    if (event.button === 0) { // Botón izquierdo
+        controls.interact = true;
     }
 });
 
-document.addEventListener('mousemove', (event) => {
-    if (isDragging) {
-        const deltaX = event.clientX - previousMouseX;
-        const deltaY = event.clientY - previousMouseY;
-        theta -= deltaX * 0.005;
-        phi = Math.min(Math.PI / 2, Math.max(0.1, phi - deltaY * 0.005));
-        previousMouseX = event.clientX;
-        previousMouseY = event.clientY;
+renderer.domElement.addEventListener('mouseup', (event) => {
+    if (event.button === 0) { // Botón izquierdo
+        controls.interact = false;
     }
 });
 
-document.addEventListener('mouseup', () => {
-    isDragging = false;
-});
-
+// Zoom con la rueda del mouse
 document.addEventListener('wheel', (event) => {
     radius += event.deltaY * 0.05;
     radius = Math.max(2, Math.min(20, radius));
@@ -234,22 +287,24 @@ document.body.appendChild(funDisplay);
 
 // Función para verificar colisiones
 function checkCollision(newX, newZ) {
-    const charHalfSize = 0.5;
-
-    const walls = [
+    const charHalfSize = 0.25;
+    const obstacles = [
         { xMin: -10, xMax: -2, zMin: -10.25, zMax: -9.75 },
         { xMin: 2, xMax: 10, zMin: -10.25, zMax: -9.75 },
         { xMin: -10, xMax: 10, zMin: 9.75, zMax: 10.25 },
         { xMin: -10.25, xMax: -9.75, zMin: -10, zMax: 10 },
-        { xMin: 9.75, xMax: 10.25, zMin: -10, zMax: 10 }
+        { xMin: 9.75, xMax: 10.25, zMin: -10, zMax: 10 },
+        { xMin: 4.5, xMax: 5.5, zMin: 4.5, zMax: 5.5 },
+        { xMin: -6.5, xMax: -3.5, zMin: -6.5, zMax: -3.5 },
+        { xMin: -0.5, xMax: 0.5, zMin: 8.75, zMax: 9.25 }
     ];
 
-    for (const wall of walls) {
+    for (const obstacle of obstacles) {
         if (
-            newX + charHalfSize > wall.xMin &&
-            newX - charHalfSize < wall.xMax &&
-            newZ + charHalfSize > wall.zMin &&
-            newZ - charHalfSize < wall.zMax
+            newX + charHalfSize > obstacle.xMin &&
+            newX - charHalfSize < obstacle.xMax &&
+            newZ + charHalfSize > obstacle.zMin &&
+            newZ - charHalfSize < obstacle.zMax
         ) {
             return true;
         }
@@ -259,21 +314,38 @@ function checkCollision(newX, newZ) {
 
 // Función para cambiar animaciones
 function setAction(newAction) {
-    if (newAction !== activeAction && mixer) {
-        activeAction.fadeOut(0.2); // Transición suave
-        newAction.reset().fadeIn(0.2).play();
-        activeAction = newAction;
+    if (mixer && walkAction) {
+        if (newAction && newAction !== activeAction) {
+            if (activeAction) {
+                activeAction.paused = true;
+            }
+            newAction.paused = false;
+            newAction.play();
+            activeAction = newAction;
+        } else if (!newAction && activeAction) {
+            activeAction.paused = true;
+            activeAction.time = 0;
+            mixer.update(0);
+            activeAction = null;
+        } else if (!newAction && !activeAction) {
+            walkAction.time = 0;
+            walkAction.paused = true;
+            mixer.update(0);
+        }
+
+        if (activeAction && !activeAction.paused && activeAction.time > walkAction.getClip().duration - 0.1) {
+            activeAction.fadeOut(0.1);
+            activeAction.reset().fadeIn(0.1).play();
+        }
     }
 }
 
-// Función de animación
 function animate() {
     requestAnimationFrame(animate);
 
-    const delta = clock.getDelta(); // Tiempo transcurrido para las animaciones
+    const delta = clock.getDelta();
 
-    if (character && mixer) { // Solo ejecuta si el personaje y el mixer están cargados
-        // Calcular la dirección de la cámara en el plano XZ
+    if (character && mixer) {
         const camDirection = new THREE.Vector3();
         camera.getWorldDirection(camDirection);
         camDirection.y = 0;
@@ -282,9 +354,16 @@ function animate() {
         const camRight = new THREE.Vector3();
         camRight.crossVectors(camDirection, new THREE.Vector3(0, 1, 0)).normalize();
 
-        const speed = 0.1;
+        const speed = 0.17; // Velocidad ajustada
         let moveX = 0;
         let moveZ = 0;
+
+        // Sincronizar controls con keyStates en cada frame
+        controls.moveForward = keyStates['w'];
+        controls.moveBackward = keyStates['s'];
+        controls.moveLeft = keyStates['a'];
+        controls.moveRight = keyStates['d'];
+        controls.interact = keyStates['e'] || controls.interact; // Permitir que el clic también active interact
 
         if (controls.moveForward) {
             moveX += camDirection.x * speed;
@@ -307,28 +386,29 @@ function animate() {
         const newZ = character.position.z + moveZ;
 
         let isMoving = false;
-        if (!checkCollision(newX, character.position.z)) {
+        if (!checkCollision(newX, newZ) && (moveX !== 0 || moveZ !== 0)) {
             character.position.x = newX;
-            isMoving = true;
-        }
-        if (!checkCollision(character.position.x, newZ)) {
             character.position.z = newZ;
             isMoving = true;
         }
 
-        // Rotar el personaje para que mire en la dirección del movimiento
-        if (isMoving && (moveX !== 0 || moveZ !== 0)) {
+        if (isMoving) {
             const angle = Math.atan2(moveX, moveZ);
             character.rotation.y = angle;
-            setAction(walkAction); // Reproducir animación de caminar
+            if (!isWalking && walkAction) {
+                setAction(walkAction);
+                isWalking = true;
+            }
         } else {
-            setAction(idleAction); // Reproducir animación de estar quieto
+            if (isWalking) {
+                setAction(null);
+                isWalking = false;
+            }
         }
 
-        // Sistema de energía
         energy -= 0.05;
-        const distanceToChair = character.position.distanceTo(chair.position);
-        if (distanceToChair < 2 && controls.interact) {
+        const distanceToSofa = character.position.distanceTo(sofa.position);
+        if (distanceToSofa < 2 && controls.interact) {
             energy += 0.5;
             character.position.y = 0;
         } else {
@@ -337,7 +417,6 @@ function animate() {
         energy = Math.max(0, Math.min(100, energy));
         energyDisplay.textContent = `Energía: ${Math.round(energy)}`;
 
-        // Sistema de hambre
         hunger -= 0.03;
         const distanceToTable = character.position.distanceTo(table.position);
         if (distanceToTable < 2 && controls.interact) {
@@ -346,7 +425,6 @@ function animate() {
         hunger = Math.max(0, Math.min(100, hunger));
         hungerDisplay.textContent = `Hambre: ${Math.round(hunger)}`;
 
-        // Sistema de diversión
         fun -= 0.04;
         const distanceToTV = character.position.distanceTo(tv.position);
         if (distanceToTV < 2 && controls.interact) {
@@ -355,7 +433,6 @@ function animate() {
         fun = Math.max(0, Math.min(100, fun));
         funDisplay.textContent = `Diversión: ${Math.round(fun)}`;
 
-        // Actualizar posición de la cámara (tercera persona)
         if (followCharacter) {
             camera.position.x = character.position.x + radius * Math.sin(theta) * Math.cos(phi);
             camera.position.y = character.position.y + radius * Math.sin(phi);
@@ -365,8 +442,9 @@ function animate() {
             camera.lookAt(character.position);
         }
 
-        // Actualizar animaciones
-        mixer.update(delta);
+        if (activeAction && !activeAction.paused) {
+            mixer.update(delta);
+        }
     }
 
     renderer.render(scene, camera);
@@ -378,4 +456,18 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Limpiar estados al perder el foco
+window.addEventListener('blur', () => {
+    keyStates['w'] = false;
+    keyStates['s'] = false;
+    keyStates['a'] = false;
+    keyStates['d'] = false;
+    keyStates['e'] = false;
+    controls.moveForward = false;
+    controls.moveBackward = false;
+    controls.moveLeft = false;
+    controls.moveRight = false;
+    controls.interact = false;
 });
